@@ -1,0 +1,304 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import glob
+import statsmodels.api as sm
+import plotly.graph_objects as go
+import plotly.express as px
+import pydeck as pdk
+import os 
+import matplotlib.pyplot as plt 
+import matplotlib
+matplotlib.use('Agg')
+import seaborn as sns 
+import plotly.express as px
+from PIL import Image
+import graphviz as graphviz
+import altair as alt
+import altair as alt
+
+
+# header
+st.title("Bagboard –  The sustainable trips from our customers")
+st.subheader("Visual representation of all the trips made in UK")
+
+# read data - source: London Bicycle Hires from Greater London Authority on Google Datasets via Bigquery
+df = pd.read_csv('full_data.csv')
+ 
+# arc plot
+df_id = df[['start_latitude', 'start_longitude', 'end_latitude', 'end_longitude']]
+
+midpoint = (np.average(df_id["end_latitude"]),
+            np.average(df_id["end_longitude"]))
+
+
+st.pydeck_chart(pdk.Deck(
+    map_style='mapbox://styles/mapbox/light-v9',
+     initial_view_state=pdk.ViewState(
+        latitude=midpoint[0],
+        longitude=midpoint[1],
+        zoom=11,
+        pitch=50,
+    ),
+    layers=[
+        pdk.Layer(
+            "ArcLayer",
+            data=df_id,
+            get_source_position="[start_longitude, start_latitude]",
+            get_target_position="[end_longitude, end_latitude]",
+            get_source_color=[0, 30, 87, 160],
+            get_target_color=[0, 30, 190, 160]
+
+        )
+    ]
+))
+
+#Mapping
+my_dataset = 'journey_locations.csv'
+DATE_TIME = "date/time"
+
+st.title("Costumer Engagement")
+st.markdown(
+"""
+This map represents the average of costumer engagement during the 24 hours, in hour-format.
+""")                                                                    # this can help to decide what time of the day is the most appropriate to launch an addvertisment and where
+
+@st.cache(persist=True)
+def load_data(nrows):
+    data = pd.read_csv(my_dataset, nrows=nrows)
+    lowercase = lambda x: str(x).lower()
+    data.rename(lowercase, axis="columns", inplace=True)
+    data[DATE_TIME] = pd.to_datetime(data[DATE_TIME])
+    return data
+
+data = load_data(100000)
+
+hour = st.slider("Hour to look at", 0, 23)
+
+data = data[data[DATE_TIME].dt.hour == hour]
+
+st.subheader("Geo data between %i:00 and %i:00" % (hour, (hour + 1) % 24))  # this was a problem, fixed 
+midpoint = (np.average(data["lat"]), np.average(data["lon"]))
+
+st.write(pdk.Deck(
+    map_style="mapbox://styles/mapbox/light-v9",
+    initial_view_state={
+        "latitude": midpoint[0],
+        "longitude": midpoint[1],
+        "zoom": 11,
+        "pitch": 50,
+    },
+    layers=[
+        pdk.Layer(
+            "HexagonLayer",
+            data=data,
+            get_position=["lon", "lat"],
+            radius=100,
+            elevation_scale=4,
+            elevation_range=[0, 1000],
+            pickable=True,
+            extruded=True,
+        ),
+    ],
+))
+
+st.subheader("Breakdown by minute between %i:00 and %i:00" % (hour, (hour + 1) % 24))
+filtered = data[
+    (data[DATE_TIME].dt.hour >= hour) & (data[DATE_TIME].dt.hour < (hour + 1))
+]
+hist = np.histogram(filtered[DATE_TIME].dt.minute, bins=60, range=(0, 60))[0]
+chart_data = pd.DataFrame({"minute": range(60), "Ongoing trips": hist})
+
+st.altair_chart(alt.Chart(chart_data)
+    .mark_area(
+        interpolate='step-after',
+    ).encode(
+        x=alt.X("minute:Q", scale=alt.Scale(nice=False)),
+        y=alt.Y("Ongoing trips:Q"),
+        tooltip=['minute', 'Ongoing trips']
+    ), use_container_width=True)
+
+if st.checkbox("Show raw data", False):
+    st.subheader("Raw data by minute between %i:00 and %i:00" % (hour, (hour + 1) % 24))
+    st.write(data)
+
+mapbox_access_token = 'pk.eyJ1IjoiY29qYWNrIiwiYSI6IkRTNjV1T2MifQ.EWzL4Qk-VvQoaeJBfE6VSA'
+px.set_mapbox_access_token(mapbox_access_token)
+
+det = st.checkbox('Press for detailed explanation',value=True)
+
+### LOAD DATA ### activities
+
+def load_data():
+    import os 
+    import time
+    import datetime
+
+    try:
+        dummyt = pd.to_datetime(time.ctime(os.path.getmtime('dummy_casesx2.csv')))
+    except:
+        dummyt = pd.to_datetime
+
+    if (pd.to_datetime(datetime.datetime.now())-dummyt).days > 0:
+        #reload all data
+        data_load_state = st.text('Loading data and running initial analyses...')
+        #get file list
+        fi = glob.glob("./*")
+        
+
+    else:
+        #use stored results:
+        LKx = pd.read_csv('LKposi.csv',index_col=0)
+        dummy_casesx2 = pd.read_csv('dummy_casesx2.csv',index_col=0)
+        dummy_casesx2.columns = pd.to_datetime(dummy_casesx2.columns)
+        dummy_increase = pd.read_csv('dummy_increase.csv',index_col=0)
+        dummy_increase.columns = pd.to_datetime(dummy_increase.columns)
+        dummy_frowfac = pd.read_csv('dummy_frowfac.csv',index_col=0)
+        dummy_frowfac.columns = pd.to_datetime(dummy_frowfac.columns)
+        dummy_double = pd.read_csv('dummy_double.csv',index_col=0)
+        dummy_double.columns = pd.to_datetime(dummy_double.columns)
+
+    return [pd.concat([LKx,dummy_casesx2],axis=1),dummy_increase,dummy_frowfac,dummy_double,LKx]
+
+
+
+[data_case,data_increase,data_frowfac,data_double,LKx] = load_data()
+
+
+
+
+### MAP ### Activities
+
+if det:
+  
+    st.subheader('Bagboard costumer activity dynamics in UK')
+  
+data_sel = st.selectbox('Select Data',['Activities','Activities per 100000 capita','Activities increase','Activities increase per 100000 capita','Increase ratio'],4)
+if data_sel=='Activities':
+    data_cases = data_case
+elif data_sel=='Activities per 100000 capita':
+    data_cases = pd.concat([LKx,data_case.iloc[:,5:].div(LKx.id1,axis=0)*100000.],axis=1)
+elif data_sel=='Activities increase':
+    data_cases = pd.concat([LKx,data_increase],axis=1)
+elif data_sel=='Activities increase per 100000 capita':
+    data_cases = pd.concat([LKx,data_increase.div(LKx.id1,axis=0)*100000.],axis=1)
+elif data_sel=='Increase ratio':
+    data_cases = pd.concat([LKx,data_frowfac],axis=1)
+
+
+
+
+#helper function
+#jiter cases
+dlat = 0.6#np.exp(np.log(data_cases.lat.sort_values().diff()).median())*50.
+dlon = 0.6#np.exp(np.log(data_cases.lon.sort_values().diff()).median())*50.
+
+def jiter_data(data,co):
+    firstitem = True
+    for i in data.index:
+        n = int(data_cases.loc[i,co])
+        c = pd.DataFrame((np.random.randn(2*n).reshape((n,2))*0.5)*np.array([dlat,dlon])+data.loc[i,['lat','lon']].values,columns=['lat','lon'])
+        if firstitem:
+            dummyj = c
+            firstitem = False
+        else:
+            dummyj = pd.concat([dummyj,c])
+    dummyj = dummyj.reset_index()
+    return dummyj
+
+if (data_sel == 'Activities') | (data_sel=='Activities per 100000 capita'):
+    hmplot = st.checkbox('Show heatmap')
+else:
+    hmplot = False
+
+di = st.slider('day', 5, len(data_cases.columns)-1, len(data_cases.columns)-1)
+datex = data_cases.columns[di]
+    
+if ((data_sel=='Activities') | (data_sel=='Activities per 100000 capita')) & (hmplot==True):
+    #show map with hexagon heatmap
+    
+    # Define a layer to display on a map
+    layer = pydeck.Layer(
+       'HexagonLayer',
+       jiter_data(data_cases,datex)[['lon', 'lat']],
+       get_position=['lon', 'lat'],
+       auto_highlight=True,
+       elevation_scale=100,
+       pickable=True,
+       colorRange=[[69,2,86],[59,28,140],[33,144,141],[90,200,101],[249,231,33]],
+       elevation_range=[0,3000],
+       elevationDomain=[0,12],
+       extruded=True,
+       coverage=10)
+    
+    # Set the viewport location
+    view_state = pydeck.ViewState(
+        longitude=8.815,
+        latitude=51.155323,
+        zoom=5,
+        pitch=25.5,
+        bearing=0.)
+    
+    st.subheader('User activities on ' + str(datex.date()))
+    st.pydeck_chart(
+        pydeck.Deck(layers=[layer], initial_view_state=view_state, mapbox_key='pk.eyJ1IjoiY29qYWNrIiwiYSI6IkRTNjV1T2MifQ.EWzL4Qk-VvQoaeJBfE6VSA')
+        )
+
+elif (data_sel=='Activities') & (hmplot==False):
+    data_cases1 = pd.concat([data_cases[['lat','lon',datex,'Location','id1']],data_increase[datex],data_frowfac[datex]],axis=1)
+    data_cases1.columns = ['lat','lon','cases','Location','capita','increase','growth']
+    fig = px.scatter_mapbox(data_cases1, lat="lat", lon="lon",  size='cases', color=np.log10(data_cases1.cases),
+                 
+                  color_continuous_scale=px.colors.sequential.Cividis, size_max=24, zoom=10, height=600)
+    fig.update_layout(coloraxis_colorbar=dict(
+        title="Activities",
+        tickvals=[0,1,2,3],
+        ticktext=['1' , '10', '100', '1000'],
+        ))
+    st.subheader('User activities on ' + str(datex.date()))
+    st.plotly_chart(fig)
+
+elif (data_sel=='Activities per 100000 capita') & (hmplot==False):
+    data_cases1 = pd.concat([data_cases[['lat','lon',datex,'Location','id1']],data_increase[datex],data_frowfac[datex]],axis=1)
+    data_cases1.columns = ['lat','lon','cases','Location','capita','increase','growth']
+    fig = px.scatter_mapbox(data_cases1, lat="lat", lon="lon",  size='cases', color='cases',
+                  color_continuous_scale=px.colors.sequential.Cividis, size_max=24, zoom=10, height=600)
+    if det:
+        st.subheader('to be edited...' + str(datex.date()))
+        st.markdown('to be edited...')
+    else:
+        st.subheader('User activities on ' + str(datex.date()))
+        st.markdown('Color and size give the number of cases per 100000 inhabitants.')
+    st.plotly_chart(fig)
+
+else:
+    data_cases1 = pd.concat([data_case[['lat','lon',datex,'Location','id1']],data_case[datex].div(LKx.id1,axis=0)*100000.,data_increase[datex],data_increase[datex].div(LKx.id1,axis=0)*100000.,data_double[datex],data_frowfac[datex]],axis=1)
+    data_cases1.columns = ['lat','lon','cases','Location','capita','cases per 100000','increase','increase per 100000','days to double','growth']
+    #data_cases1 = data_cases1.dropna()
+    if (data_sel=='Activities increase'):
+        fig = px.scatter_mapbox(data_cases1, lat="lat", lon="lon",  size='cases per 100000', color='increase',
+                  color_continuous_scale=px.colors.diverging.Portland, size_max=24, zoom=10, height=600)
+        if det:
+            st.subheader('to be edited...' + str(datex.date()))
+            st.markdown('to be edited...')
+        else:
+            st.subheader('User activities on ' + str(datex.date()))
+            st.markdown('Color gives total Activities. Size gives Activities per capita.')
+        st.plotly_chart(fig)
+    elif (data_sel=='Activities increase per 100000 capita'):
+        fig = px.scatter_mapbox(data_cases1, lat="lat", lon="lon",  size='cases per 100000', color='increase per 100000',
+                  color_continuous_scale=px.colors.diverging.Portland, size_max=24, zoom=5, height=600)
+        if det:
+            st.subheader('to be edited... ' + str(datex.date()))
+            st.markdown('to be edited...')
+        else:
+            st.subheader('User activities  increase per 100000 on ' + str(datex.date()))
+            st.markdown('Color gives the increase of Activities. Size gives Activities per capita.')
+        st.plotly_chart(fig)
+    
+    elif (data_sel=='Increase ratio'):
+        fig = px.scatter_mapbox(data_cases1, lat="lat", lon="lon",  size='cases per 100000', color='growth',
+                  color_continuous_scale=px.colors.diverging.Portland, size_max=24, zoom=10, height=600)
+        st.subheader('User activities growth on ' + str(datex.date()))
+        st.markdown('Color gives growth ratio to last case increase. Size gives cases per capita.')
+        st.plotly_chart(fig)
